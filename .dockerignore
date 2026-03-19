@@ -1,0 +1,9 @@
+docs/
+*.pdf
+.env
+__pycache__/
+*.pyc
+.git/
+notebook_tutorial.ipynb
+lovable_prompt.md
+README.md

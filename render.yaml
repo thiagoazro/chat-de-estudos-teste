@@ -1,0 +1,19 @@
+# render.yaml — Blueprint de deploy no Render.
+# Commite este arquivo na raiz do repo.
+# No Render: New > Blueprint > conecte o repo GitHub.
+
+services:
+  - type: web
+    name: study-agent-rag
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false  # configurar manualmente no dashboard do Render
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: COLLECTION_NAME
+        value: study_agent
