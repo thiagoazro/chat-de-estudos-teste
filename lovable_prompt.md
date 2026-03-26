@@ -2,102 +2,149 @@
 
 Cole o bloco abaixo diretamente no Lovable para gerar a interface completa.
 
-> **Antes de colar:** substitua a URL base da API pela URL real do seu deploy no Render.
-
 ---
 
 ```
-Crie uma aplicação web React moderna e responsiva para um "Agente de Estudos em Engenharia de Dados & IA".
+Crie uma aplicação web React + TypeScript + Tailwind CSS + Vite para um Agente de Estudos RAG em Engenharia de Dados & IA.
 
-A aplicação consome uma API REST já existente. A URL base da API é uma variável de ambiente configurável (VITE_API_URL), com fallback para "https://study-agent-rag.onrender.com".
+## API Backend (já existente)
 
-Aqui está a documentação completa dos endpoints da API que o frontend deve consumir:
+Base URL: https://chat-de-estudos-teste.onrender.com
 
-## Endpoints disponíveis
+Endpoints:
 
-### GET /health
-- Retorna: {"status": "healthy"|"degraded", "service": "study-agent-rag", "qdrant_connected": true|false}
-- Usar para mostrar badge de status da API no header
+| Método | Rota          | Body                                  | Resposta                                                                                          |
+|--------|---------------|---------------------------------------|---------------------------------------------------------------------------------------------------|
+| GET    | /health       | —                                     | { status, service, qdrant_connected }                                                             |
+| GET    | /stats        | —                                     | { collection, total_points, status }                                                              |
+| POST   | /ingest       | FormData { file: PDF }                | { status, filename, total_chunks, total_characters, collection }                                  |
+| POST   | /ingest/url   | { url: string }                       | mesmo schema do /ingest                                                                           |
+| POST   | /query        | { question: string } (3-1000 chars)   | { answer, sources[], chunks_used, retrieved_chunks[{ text, source, score, chunk_index }] }        |
 
-### GET /stats
-- Retorna: {"collection": "study_agent", "total_points": 1234, "status": "green"}
-- Usar para mostrar total de documentos vetorizados
+Crie um módulo `src/lib/api.ts` centralizando todas as chamadas com tipagem completa (interfaces para cada response). Use fetch nativo sem Axios.
 
-### POST /ingest (multipart/form-data)
-- Body: FormData com campo "file" contendo um PDF
-- Retorna: {"status": "ok", "filename": "doc.pdf", "total_chunks": 15, "total_characters": 8200, "collection": "study_agent"}
-- Aceita apenas arquivos .pdf
+## Layout & Estrutura
 
-### POST /ingest/url (JSON)
-- Body: {"url": "https://arxiv.org/pdf/2005.11401v4"}
-- Retorna: mesmo schema do /ingest
-- Baixa PDF de URL pública e ingere
+**Header fixo:**
+- Logo da marca (importada de `src/assets/logo.jpeg`) centralizada acima do conteúdo principal
+- Título "Agente de Estudos — Engenharia de Dados & IA" com gradiente de texto
+- Badge de status da API (chama GET /health ao montar): verde = online, vermelho = offline
+- Toggle de tema claro/escuro (usar next-themes)
 
-### POST /query (JSON)
-- Body: {"question": "O que é um pipeline de ETL?"} (min 3 chars, max 1000)
-- Retorna:
-  {
-    "answer": "Um pipeline de ETL consiste em...",
-    "sources": ["engenharia_dados_estudo.pdf"],
-    "chunks_used": 5,
-    "retrieved_chunks": [
-      {
-        "text": "ETL significa Extract, Transform...",
-        "source": "engenharia_dados_estudo.pdf",
-        "score": 0.9234,
-        "chunk_index": 0
-      }
-    ]
-  }
+**Corpo principal** com duas abas (usar componente Tabs do shadcn):
+- 💬 Perguntar (aba padrão)
+- 📄 Enviar Material
 
-## Layout da aplicação
+**Sidebar esquerda** (colapsável no mobile):
+- Histórico de perguntas anteriores com timestamp
+- Ao clicar numa entrada, recarrega a pergunta e resposta
 
-- Header fixo com título "📚 Agente de Estudos — Engenharia de Dados & IA" e um badge mostrando o status da API (verde=online, vermelho=offline). Faça um GET em /health ao carregar para verificar.
-- Duas abas/seções: "💬 Perguntar" e "📄 Enviar Material"
+**Footer:**
+- "Powered by FastAPI + Qdrant + OpenAI"
 
-## Aba "Perguntar" (principal)
-- Campo de texto (textarea) para o aluno digitar a pergunta
-- Botão "Perguntar ao Agente" que faz POST em /query com body {"question": "texto"}
-- Área de resposta estilizada como card com:
-  - A resposta do agente (renderizar markdown se houver)
-  - Lista de fontes usadas (campo "sources" do response)
-  - Badge com número de chunks usados
-  - Seção expansível/colapsável "Ver trechos recuperados" mostrando os retrieved_chunks com score de relevância em formato de barra de progresso
-- Skeleton/loading state enquanto a API processa
-- Histórico de perguntas anteriores na lateral esquerda (sidebar colapsável no mobile)
+## Aba "Perguntar"
+
+**Chips de sugestões no topo:**
+- "O que é ETL?", "Explique Data Lake vs Data Warehouse", "Como funciona Apache Airflow?", "O que é RAG?", "Pra que serve um banco vetorial?"
+- Ao clicar, preenche o textarea e dispara a query automaticamente
+
+**Área de input:**
+- textarea dentro de um card glassmorphism
+- Enter envia (Shift+Enter para nova linha)
+- Botão "Perguntar ao Agente" com ícone Send, desabilitado se < 3 chars ou loading
+
+**Exibição da resposta** — 3 cards separados em sequência vertical:
+
+1. **Card da Resposta** — apenas o texto da resposta renderizado com react-markdown
+   - IMPORTANTE: A API pode incluir "Trechos-fonte utilizados: Trecho 1, Trecho 2..." no final do campo answer. Remover essa parte com regex antes de renderizar: `.replace(/Trechos-fonte utilizados:[\s\S]*/i, '').trim()`
+
+2. **Card de Fontes** — card separado abaixo com:
+   - Título "FONTES" em uppercase
+   - Badge com número de chunks usados
+   - Badges com nomes dos arquivos fonte
+
+3. **Card de Trechos Recuperados** — card separado abaixo com:
+   - Botão colapsável "Ver trechos recuperados (N)"
+   - Ao expandir, mostra cada chunk com: source, chunk_index, score em % com barra de progresso, e texto truncado (line-clamp-4)
+
+**Loading state:** skeleton pulse com 4 linhas de tamanhos variados
+
+**Animações:** usar framer-motion com AnimatePresence para entrada dos cards (fade + slide up), com delay escalonado entre os 3 cards.
 
 ## Aba "Enviar Material"
-- Duas sub-seções lado a lado (ou empilhadas no mobile):
 
-  1. "Upload de PDF":
-     - Área de drag-and-drop para upload de PDF
-     - Ao soltar o arquivo, faz POST em /ingest com FormData contendo o campo "file"
-     - Mostra progresso do upload
+Duas sub-seções lado a lado (empilhadas no mobile):
 
-  2. "Ingerir por URL":
-     - Campo de input para colar URL de PDF público (ex: arXiv, Google Drive)
-     - Botão "Ingerir URL" que faz POST em /ingest/url com body {"url": "texto"}
-     - Placeholder de exemplo: "https://arxiv.org/pdf/2005.11401v4"
+1. **Upload de PDF:**
+   - Área de drag-and-drop estilizada (ícone Upload, texto instrucional)
+   - Aceita apenas .pdf
+   - Ao soltar/selecionar, faz POST /ingest com FormData
+   - Mostra estado de loading durante upload
 
-- Após sucesso em qualquer via, mostra card com métricas: nome do arquivo, total de chunks, total de caracteres
-- Botão para ver estatísticas da base (GET /stats mostrando total de documentos vetorizados)
+2. **Ingerir por URL:**
+   - Input com placeholder `https://arxiv.org/pdf/2005.11401v4`
+   - Botão "Ingerir URL" que faz POST /ingest/url
 
-## Design
-- Tema escuro como padrão com toggle para tema claro
-- Cores principais: azul (#3B82F6) e roxo (#8B5CF6) em gradientes sutis
-- Cards com glassmorphism (backdrop-blur, bordas semi-transparentes)
-- Tipografia moderna (Inter ou system font stack)
-- Animações suaves de entrada nos cards de resposta
-- Mobile-first, totalmente responsivo
+**Após sucesso em qualquer via:**
+- Card de resultado com: nome do arquivo, total de chunks, total de caracteres
+- Animação de entrada
 
-## Tratamento de erros
-- Se a API retornar erro, mostrar toast/notification com a mensagem
-- Se a API estiver offline, desabilitar os botões e mostrar banner informativo
-- Validar que a pergunta tem pelo menos 3 caracteres antes de enviar
+**Botão "Ver Estatísticas da Base":**
+- Chama GET /stats
+- Mostra total de documentos vetorizados em card
 
-## Extras
-- Sugestões de perguntas prontas (chips clicáveis) como "O que é ETL?", "Explique Data Lake vs Data Warehouse", "Como funciona Apache Airflow?", "O que é RAG?", "Pra que serve um banco vetorial?"
-- Ao clicar numa sugestão, preenche o campo e envia automaticamente
-- Mostrar timestamp nas perguntas do histórico
-- Footer discreto com "Powered by FastAPI + Qdrant + OpenAI"
+## Design System
+
+**Tema escuro como padrão.** Definir tokens semânticos em CSS variables HSL no index.css:
+
+`:root` (light) e `.dark`:
+- `--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--accent`, `--border`, `--ring`
+
+**Paleta:**
+- Primary: azul `217 91% 60%`
+- Accent: âmbar/dourado `45 96% 53%` (combinar com a logo)
+- Background dark: `220 20% 6%`
+- Cards: glassmorphism com `backdrop-blur-2xl`, `bg-card/60`, `border-border/20`
+- Background: radial gradients sutis de primary e accent com opacidade baixa
+
+**Tipografia:** system font stack, sem fontes externas. Títulos com gradient-text (gradiente de primary para accent).
+
+**Classe utilitária `.glass-card`:**
+```css
+.glass-card {
+  @apply bg-card/60 backdrop-blur-2xl border border-border/20 rounded-2xl shadow-2xl;
+}
+```
+
+**Responsividade:** mobile-first. Sidebar vira drawer no mobile. Grid de 2 colunas no desktop para a aba de ingestão.
+
+## Tratamento de Erros
+
+- Toast (shadcn) para erros da API com mensagem descritiva
+- Se /health retornar offline, mostrar banner e desabilitar botões
+- Validação client-side: pergunta ≥ 3 chars, arquivo deve ser .pdf, URL deve ser válida
+
+## Dependências necessárias
+
+- `react-markdown` para renderizar respostas
+- `framer-motion` para animações
+- `next-themes` para toggle de tema
+- `lucide-react` para ícones
+- shadcn/ui components: Tabs, Progress, Toast, Sheet (sidebar mobile)
+
+## Estrutura de arquivos
+
+```
+src/
+  lib/api.ts          — tipos e funções de chamada à API
+  components/
+    AppHeader.tsx      — header com logo, título, badge status, theme toggle
+    QueryTab.tsx       — aba de perguntas com input, sugestões, resultado
+    IngestTab.tsx      — aba de upload/ingestão
+    HistorySidebar.tsx — sidebar com histórico
+  pages/
+    Index.tsx          — página principal compondo tudo
+  assets/
+    logo.jpeg          — logo da marca
+```
 ```
